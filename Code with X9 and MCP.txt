@@ -1,0 +1,115 @@
+--- Section of includes ---
+#include Wire.h This library is necessary for using the communication protocol call I2C.
+#include SPI.h  
+
+--- Section of defines ---
+Note the B before the name of the variables means that the number must be binary
+#define DP_slave_adress B00101000 Setting the adress of the slave DP (Digital Potentiometer)
+#define X9_DP_instr B10100000  A B C DE FG H Setting the data of the slave DP (A-D = INSTRUCTIONS)
+                            (E-F = NUMBER OF POTENTIOMETER)
+                            (G-H = WHICH REGISTER)
+#define pot_0 B10100000
+#define pot_1 B10100100
+#define pot_2 B10101000
+#define pot_3 B10101100
+
+#define voltage_input 5 Value of the voltage input of the output of arduino applied to the voltage division
+#define number_of_step_DP_X9 64 The number of steps from the digital potentiometer
+
+#define pin_CS 49 Pin CS for the MCP41010
+#define number_of_step_DP_MPC 256 Resolution of the steps from the MPC potentiometer
+#define MPC_DP_instr B00010001 Instruction sent to the MPC potentiometer
+
+Action write in the selected potentiometer a value of resistence by selection the wipe position
+ Inputs 
+         which_Pot - selecte which potentiometer must have it resistence value change
+         wiper_value_selection - selected where the wipe gonna be
+  Return --
+ 
+void change_R_DP_X9 (uint8_t which_Pot, uint8_t wiper_value_selection){
+  Wire.beginTransmission(DP_slave_adress); START the communication
+  Wire.write(which_Pot); Write in the DP this instruction
+  Wire.write(wiper_value_selection); Write in the DP this value 
+  delay(10);
+  Wire.endTransmission(); End the transmission
+}
+
+Action Generate the ramp as the resistence of the potentiometer variates.
+ Inputs 
+         deltaT - time in milliseconds to increase the value of the voltage
+         deltaV - value in voltage of it's step 
+  Return --
+ 
+void generate_ramp_X9 (uint16_t deltaT, float deltaV){
+  float step_voltage = float(voltage_input)float(number_of_step_DP_X9); This calculate the resolution of the voltage that can be applied.
+  int step_wiper=deltaVstep_voltage; Calculate the step that the wiper must increase
+  uint8_t wiper_position=0; New variable to control the position of the wiper by adding the step
+  round(step_wiper); Round the step, as it just can be a integer number between 0-64
+  do {      
+      change_R_DP_X9(pot_0, wiper_position); Variate the resistence of the selected potentiometer by selecting the position of the wiper
+      wiper_position=wiper_position+step_wiper; Increasinig the wiper's position according to the step of the definied by the user
+      delay(deltaT);
+  }while(wiper_positionnumber_of_step_DP_X9);
+  change_R_DP_X9(pot_0, 0); Not shure if this should keep here when the measurement comes to the end, the wiper goes to position 0.
+  delay(deltaT);
+}
+
+Action write in the selected potentiometer a value of resistence by selection the wipe position
+ Inputs 
+         instruction - select what the potentiometer should do (datasheet)
+         wiper_value_selection - selected where the wipe gonna be
+  Return --
+ 
+void change_R_DP_MPC (uint8_t instruction, uint8_t wiper_value_selection){
+  digitalWrite(pin_CS,LOW);
+  SPI.transfer(instruction);  This tells the chip to set the pot
+  SPI.transfer(wiper_value_selection);      This tells it the pot position
+  digitalWrite(pin_CS,HIGH);
+  delay(10);
+}
+
+Action Generate the ramp as the resistence of the potentiometer variates.
+ Inputs 
+         deltaT - time in milliseconds to increase the value of the voltage
+         deltaV - value in voltage of it's step 
+  Return --
+ 
+int pos_wiper_MPC[26]={0, 10, 20, 30, 41, 51, 61, 72, 82, 92, 103, 113, 123, 133, 144, 154, 
+                       164, 175, 185, 195, 206, 216, 226, 237, 247, 255};
+  This corresponds to the vector of voltage [0, 0.1953125, 0.390625 0.60546875 0.80078125 0.99609375
+....
+  
+  void generate_ramp_MPC (uint16_t deltaT){
+    int vect_counter=0;
+   for (vect_counter=0;vect_counter26;vect_counter++){
+    change_R_DP_MPC(MPC_DP_instr, pos_wiper_MPC[vect_counter]);
+    delay(deltaT);  
+  } 
+  do {      
+      if ((number_of_step_DP_MPC-wiper_positionstep_wiper)){ This was made to correct the bug of the wiper position keeps increase after was greater than the number_of_step
+        break; leave the loop (do-while)
+      }
+      change_R_DP_MPC(MPC_DP_instr, wiper_position); Variate the resistence of the selected potentiometer by selecting the position of the wiper
+      wiper_position=wiper_position+step_wiper; Increasinig the wiper's position according to the step of the definied by the user
+      delay(deltaT);
+  }while(wiper_positionnumber_of_step_DP_MPC);
+  change_R_DP_MPC(MPC_DP_instr, 0); Not shure if this should keep here when the measurement comes to the end, the wiper goes to position 0.
+  
+  delay(deltaT);
+  
+}
+
+void setup() {
+   put your setup code here, to run once
+  pinMode (pin_CS, OUTPUT);  Defining the pin CD of the MPC41010 as a digital output
+  Wire.begin(); Boot of the library and setting the arduino as master. This is a default option when there is nothing written inside the parenthesis, the device is a master.
+  SPI.begin(); Boot of the library necessary for the SPI protocol
+  Serial.begin(9600);
+  generate_ramp_X9(4000, 0.234375);
+  generate_ramp_MPC(2000);
+}
+
+void loop() {
+   put your main code here, to run repeatedly
+
+}
